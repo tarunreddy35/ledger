@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Ledger {
+  id          String   @id @default(cuid())
+  date        DateTime
+  description String
+  amount      Float
+  category    String?
+  source      String
+  createdAt   DateTime @default(now())
+
+  emailReceipts EmailReceipt[] // 👈 back-reference added
+}
+
+model BankTransaction {
+  id            String   @id @default(cuid())
+  date          DateTime
+  description   String
+  amount        Float
+  balance       Float?
+  source        String
+  statementId   String     // 👈 foreign key
+  statement     BankStatement @relation(fields: [statementId], references: [id]) // 👈 required relation
+  createdAt     DateTime  @default(now())
+}
+
+
+
+
+model EmailReceipt {
+  id          String   @id @default(cuid())
+  subject     String
+  sender      String
+  date        DateTime
+  pdfUrl      String
+  extracted   Boolean  @default(false)
+  confidence  Float?
+  ledgerId    String?
+  ledgerEntry Ledger?  @relation(fields: [ledgerId], references: [id])
+}

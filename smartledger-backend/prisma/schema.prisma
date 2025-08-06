@@ -1,0 +1,119 @@
+// schema.prisma
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Users (optional if Clerk handles auth)
+
+model User {
+  id                String             @id @default(uuid())
+  email             String             @unique
+  name              String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  emailConnections  EmailConnection[]
+  stripeConnections StripeConnection[]
+  ledgerEntries     LedgerEntry[]
+  bankStatements    BankStatement[]
+  emailReceipts     EmailReceipt[]
+}
+
+// Email connection
+
+model EmailConnection {
+  id        String   @id @default(uuid())
+  userId    String
+  email     String
+  status    String // connected / disconnected
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// Stripe connection
+
+model StripeConnection {
+  id        String   @id @default(uuid())
+  userId    String
+  status    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// Ledger entries
+model LedgerEntry {
+  id          String      @id @default(uuid())
+  userId      String
+  date        DateTime
+  description String
+  amount      Decimal
+  vendor      String
+  source      String // email, manual, csv
+  status      MatchStatus @default(UNMATCHED)
+  createdAt   DateTime    @default(now()) 
+  statementId String
+  statement   BankStatement @relation(fields: [statementId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+}
+
+
+enum MatchStatus {
+  MATCHED
+  UNMATCHED
+  PENDING
+}
+
+// Bank Statements
+
+model BankStatement {
+  id         String   @id @default(uuid())
+  userId     String
+  name       String
+  uploadDate DateTime
+  rows       Int
+  status     String // processed / pending / failed
+  createdAt  DateTime @default(now())
+
+  user         User              @relation(fields: [userId], references: [id])
+  transactions BankTransaction[]
+  ledgerEntries LedgerEntry[]
+}
+
+// Bank Transactions
+
+model BankTransaction {
+  id              String   @id @default(uuid())
+  statementId     String
+  date            DateTime
+  description     String
+  amount          Decimal
+  balance         Decimal?
+  confidence      Int? // for AI scoring
+  matchedLedgerId String? // for reconciliation
+  source          String // e.g., Chase, HDFC
+
+  statement BankStatement @relation(fields: [statementId], references: [id])
+}
+
+// Email Receipts (parsed)
+
+model EmailReceipt {
+  id         String   @id @default(uuid())
+  userId     String
+  subject    String
+  date       DateTime
+  amount     Decimal
+  vendor     String
+  status     String // processed / pending / failed
+  confidence Int
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
