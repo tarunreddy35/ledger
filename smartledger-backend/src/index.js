@@ -11,22 +11,59 @@ import csv from "csv-parser";
 import path from "path";
 import { PrismaClient } from "@prisma/client";
 
+// Check for required environment variables
+if (!process.env.DATABASE_URL) {
+    console.error('DATABASE_URL environment variable is required');
+    throw new Error('DATABASE_URL environment variable is required');
+}
+
 // === Setup ===
 const app = express();
-const prisma = new PrismaClient();
-const upload = multer({ dest: "uploads/" });
+
+// Initialize Prisma client with proper configuration for serverless
+const prisma = new PrismaClient({
+    datasources: {
+        db: {
+            url: process.env.DATABASE_URL
+        }
+    }
+});
+
+const upload = multer({ dest: "/tmp/" }); // Use /tmp for serverless
 
 app.use(cors());
 app.use(express.json());
 
+// === Health Check ===
+app.get("/", (req, res) => {
+    res.json({ 
+        message: "Smart Ledger Backend API", 
+        status: "running",
+        timestamp: new Date().toISOString(),
+        env: {
+            node_env: process.env.NODE_ENV,
+            has_database_url: !!process.env.DATABASE_URL
+        }
+    });
+});
+
+app.get("/health", (req, res) => {
+    res.json({ status: "healthy", timestamp: new Date().toISOString() });
+});
+
 // === tRPC ===
-app.use(
-    "/trpc",
-    trpcExpress.createExpressMiddleware({
-        router: appRouter,
-        createContext: () => ({}),
-    })
-);
+try {
+    app.use(
+        "/trpc",
+        trpcExpress.createExpressMiddleware({
+            router: appRouter,
+            createContext: () => ({}),
+        })
+    );
+} catch (error) {
+    console.error("Failed to setup tRPC middleware:", error);
+    throw error;
+}
 
 // === CSV Upload ===
 app.post("/api/upload-csv", upload.single("file"), (req, res) => {
@@ -63,13 +100,23 @@ app.post("/api/upload-csv", upload.single("file"), (req, res) => {
                     data: entries,
                 });
 
-                fs.unlinkSync(file.path);
+                // Clean up file - handle potential errors
+                try {
+                    fs.unlinkSync(file.path);
+                } catch (unlinkError) {
+                    console.warn("Could not delete temporary file:", unlinkError.message);
+                }
 
                 res.status(200).json({ message: "CSV uploaded and inserted", count: entries.length });
             } catch (error) {
                 console.error("DB Error:", error);
-                fs.unlinkSync(file.path);
-                res.status(500).json({ error: "Failed to insert ledger entries" });
+                // Clean up file even on error
+                try {
+                    fs.unlinkSync(file.path);
+                } catch (unlinkError) {
+                    console.warn("Could not delete temporary file:", unlinkError.message);
+                }
+                res.status(500).json({ error: "Failed to insert ledger entries", details: error.message });
             }
         })
         .on("error", (error) => {
@@ -78,8 +125,5 @@ app.post("/api/upload-csv", upload.single("file"), (req, res) => {
         });
 });
 
-// === Start Server ===
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-    console.log(`🚀 Backend running at http://localhost:${PORT}`);
-});
+// === Export for Vercel ===
+export default app;
