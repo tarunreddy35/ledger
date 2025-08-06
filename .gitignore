@@ -62,3 +62,4 @@ uploads/
 
 # Test files
 test-db.js
+.vercel
