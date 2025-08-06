@@ -8,7 +8,8 @@
     "dev": "nodemon --loader ts-node/esm src/index.js",
     "build": "tsc",
     "start": "node dist/index.js",
-    "seed": "node prisma/seed.cjs"
+    "seed": "node prisma/seed.cjs",
+    "vercel-build": "npx prisma generate && npx prisma migrate deploy"
   },
   "keywords": [],
   "author": "",
